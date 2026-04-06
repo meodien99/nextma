@@ -193,6 +193,7 @@ nextma visualize [--out <path>] [--port <number>]
 | `--port` | `4321` | Port to serve on |
 
 ---
+![demo](public/visualize.png)
 
 ## Optional: Figma → code generation
 
