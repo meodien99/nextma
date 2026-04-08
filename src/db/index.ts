@@ -145,7 +145,7 @@ export function searchNodes(
 function rowToNode(row: NodeRow): GraphNode {
   return {
     id: row.id,
-    label: row.label,
+    label: row.label as GraphNode['label'],
     name: row.name,
     path: row.path,
     startLine: row.start_line,
@@ -195,7 +195,7 @@ function rowToEdge(row: EdgeRow): GraphEdge {
     id: row.id,
     fromId: row.from_id,
     toId: row.to_id,
-    kind: row.kind,
+    kind: row.kind as GraphEdge['kind'],
     properties: JSON.parse(row.properties),
   };
 }

@@ -124,6 +124,15 @@ const TOOLS = [
 ];
 
 // ---------------------------------------------------------------------------
+// Logger — writes to stderr so it doesn't corrupt the stdio MCP transport
+// ---------------------------------------------------------------------------
+
+function log(msg: string): void {
+  const ts = new Date().toISOString().slice(11, 23); // HH:MM:SS.mmm
+  process.stderr.write(`[nextma ${ts}] ${msg}\n`);
+}
+
+// ---------------------------------------------------------------------------
 // Start MCP server
 // ---------------------------------------------------------------------------
 
@@ -131,30 +140,48 @@ export async function startMcpServer(contextDir: string, _projectRoot: string): 
   const dbPath = path.resolve(contextDir);
   const db = openDb(dbPath);
 
+  log(`server ready — db: ${dbPath}/graph.db`);
+
   const server = new Server(
     { name: 'nextma', version: '2.0.0' },
     { capabilities: { tools: {} } },
   );
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    log(`tools listed (${TOOLS.length} tools)`);
+    return { tools: TOOLS };
+  });
 
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
     const { name, arguments: args = {} } = req.params;
 
+    // Log the call with a short arg summary
+    const argSummary = Object.entries(args)
+      .map(([k, v]) => `${k}=${JSON.stringify(v)?.slice(0, 60)}`)
+      .join(', ');
+    log(`→ ${name}(${argSummary})`);
+
+    const start = Date.now();
+    let result;
+
     switch (name) {
-      case 'recon':             return reconTool(db)(args as { query: string; routeId?: string; depth?: number });
-      case 'find_reusable':     return findReusableTool(db)(args as { query: string; limit?: number });
-      case 'search_nodes':      return searchNodesTool(db)(args as { label?: string; namePattern?: string; pathPattern?: string; limit?: number });
-      case 'get_node':          return getNodeTool(db)(args as { id: string });
-      case 'get_relations':     return getRelationsTool(db)(args as { id: string; direction?: 'from' | 'to' | 'both'; kind?: string });
-      case 'get_route_tree':    return getRouteTreeTool(db)();
-      case 'get_component_tree': return getComponentTreeTool(db)(args as { id: string; depth?: number });
-      case 'get_boundary_map':  return getBoundaryMapTool(db)(args as { routeId: string });
-      case 'detect_changes':    return detectChangesTool(db)();
-      case 'figma_matches':     return figmaMatchesTool(db)(args as { slug: string });
+      case 'recon':             result = reconTool(db)(args as { query: string; routeId?: string; depth?: number }); break;
+      case 'find_reusable':     result = findReusableTool(db)(args as { query: string; limit?: number }); break;
+      case 'search_nodes':      result = searchNodesTool(db)(args as { label?: string; namePattern?: string; pathPattern?: string; limit?: number }); break;
+      case 'get_node':          result = getNodeTool(db)(args as { id: string }); break;
+      case 'get_relations':     result = getRelationsTool(db)(args as { id: string; direction?: 'from' | 'to' | 'both'; kind?: string }); break;
+      case 'get_route_tree':    result = getRouteTreeTool(db)(); break;
+      case 'get_component_tree': result = getComponentTreeTool(db)(args as { id: string; depth?: number }); break;
+      case 'get_boundary_map':  result = getBoundaryMapTool(db)(args as { routeId: string }); break;
+      case 'detect_changes':    result = detectChangesTool(db)(); break;
+      case 'figma_matches':     result = figmaMatchesTool(db)(args as { slug: string }); break;
       default:
+        log(`✗ unknown tool: ${name}`);
         return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true };
     }
+
+    log(`✓ ${name} (${Date.now() - start}ms)`);
+    return result;
   });
 
   const transport = new StdioServerTransport();

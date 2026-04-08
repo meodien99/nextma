@@ -7,6 +7,8 @@ import { FigmaRawNode, FigmaFill, FigmaTextStyle, FigmaStyleEntry } from './api'
 export interface NormalizedColor {
   hex: string;
   opacity: number;
+  /** Token name derived from Figma fill style name e.g. "color-700", "neutral" */
+  tokenName?: string;
 }
 
 export interface NormalizedText {
@@ -58,8 +60,10 @@ export interface NormalizedFigmaFile {
   componentRefs: string[];
   /** All TEXT nodes found in the tree */
   textNodes: NormalizedText[];
-  /** All unique fill colors found across the tree */
+  /** All unique fill colors found across the tree (hex strings) */
   colorPalette: string[];
+  /** hex → token name, derived from Figma fill style names */
+  colorStyles: Record<string, string>;
   /** Detected icon references (nodes whose name/type suggests an icon) */
   iconRefs: string[];
 }
@@ -78,6 +82,32 @@ function styleNameToTailwind(styleName: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Fill style name → design token name
+// e.g. "Neutral/$color-700-base [night]" → "color-700"
+//      "Neutral/$color-0 [night]"        → "neutral"  (color-0 = group default)
+// ---------------------------------------------------------------------------
+
+export function fillStyleNameToToken(styleName: string): string {
+  const parts = styleName.split('/');
+  const group = parts[0].trim().toLowerCase();
+  const raw = (parts[parts.length - 1] ?? parts[0]).trim();
+
+  // Remove $ prefix, theme suffix like " [night]" or " [day]"
+  let token = raw
+    .replace(/^\$/, '')
+    .replace(/\s*\[.*?\]\s*$/, '')
+    .trim();
+
+  // Remove -base / -hover / -active / -disabled variant suffixes
+  token = token.replace(/-(base|hover|active|disabled|focus|pressed)$/i, '');
+
+  // Special case: color-0 means the group default (e.g. "neutral")
+  if (token === 'color-0') return group;
+
+  return token;
+}
+
+// ---------------------------------------------------------------------------
 // Color helpers
 // ---------------------------------------------------------------------------
 
@@ -86,13 +116,15 @@ function toHex(r: number, g: number, b: number): string {
   return `#${byte(r)}${byte(g)}${byte(b)}`.toUpperCase();
 }
 
-function extractFills(fills: FigmaFill[]): NormalizedColor[] {
+function extractFills(fills: FigmaFill[], colorStyleName?: string): NormalizedColor[] {
   const result: NormalizedColor[] = [];
+  const tokenName = colorStyleName ? fillStyleNameToToken(colorStyleName) : undefined;
   for (const fill of fills) {
     if (fill.type === 'SOLID' && fill.color) {
       result.push({
         hex: toHex(fill.color.r, fill.color.g, fill.color.b),
         opacity: fill.opacity ?? fill.color.a ?? 1,
+        tokenName,
       });
     }
   }
@@ -142,7 +174,7 @@ function normalizeRaw(
   const fillStyleId = raw.styles?.['fill'];
   const colorStyleName = fillStyleId ? styles[fillStyleId]?.name : undefined;
   if (raw.fills && raw.fills.length > 0) {
-    const fills = extractFills(raw.fills);
+    const fills = extractFills(raw.fills, colorStyleName);
     if (fills.length > 0) node.fills = fills;
   }
 
@@ -194,13 +226,19 @@ function walkTree(
   componentRefs: Set<string>,
   textNodes: NormalizedText[],
   colors: Set<string>,
+  colorStyles: Record<string, string>,
   iconRefs: Set<string>
 ): void {
   if (node.componentRef) componentRefs.add(node.componentRef);
   if (node.text) textNodes.push(node.text);
-  if (node.fills) node.fills.forEach((f) => colors.add(f.hex));
+  if (node.fills) {
+    node.fills.forEach((f) => {
+      colors.add(f.hex);
+      if (f.tokenName) colorStyles[f.hex] = f.tokenName;
+    });
+  }
   if (looksLikeIcon(node.name, node.type)) iconRefs.add(node.name);
-  node.children?.forEach((c) => walkTree(c, componentRefs, textNodes, colors, iconRefs));
+  node.children?.forEach((c) => walkTree(c, componentRefs, textNodes, colors, colorStyles, iconRefs));
 }
 
 // ---------------------------------------------------------------------------
@@ -216,8 +254,9 @@ export function normalizeFigmaNode(
   const componentRefs = new Set<string>();
   const textNodes: NormalizedText[] = [];
   const colors = new Set<string>();
+  const colorStyles: Record<string, string> = {};
   const iconRefs = new Set<string>();
-  walkTree(root, componentRefs, textNodes, colors, iconRefs);
+  walkTree(root, componentRefs, textNodes, colors, colorStyles, iconRefs);
 
   return {
     nodeId: raw.id,
@@ -227,6 +266,7 @@ export function normalizeFigmaNode(
     componentRefs: Array.from(componentRefs),
     textNodes,
     colorPalette: Array.from(colors),
+    colorStyles,
     iconRefs: Array.from(iconRefs),
   };
 }

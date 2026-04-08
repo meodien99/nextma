@@ -63,12 +63,23 @@ function buildFontSizeMap(fontSize: Record<string, unknown>): Map<string, string
   return map;
 }
 
+function resolveColorToken(
+  hex: string,
+  colorStyles: Record<string, string>,
+  tokenColorEntries?: TokenEntry[],
+): string | null {
+  // 1. Exact match from Figma style name (most reliable)
+  if (colorStyles[hex]) return colorStyles[hex];
+  // 2. Approximate RGB match from design token entries (fallback)
+  return tokenColorEntries ? findNearestToken(hex, tokenColorEntries) : null;
+}
+
 export function renderDesignIntent(
   normalized: NormalizedFigmaFile,
   tokenColorEntries?: TokenEntry[],
   designTokens?: Record<string, unknown>,
 ): string {
-  const { nodeName, nodeId, nodeType, root, componentRefs, textNodes, colorPalette, iconRefs } = normalized;
+  const { nodeName, nodeId, nodeType, root, componentRefs, textNodes, colorPalette, colorStyles, iconRefs } = normalized;
   const lines: string[] = [`# Design Intent: ${nodeName}`, '', `**Node ID:** \`${nodeId}\``, `**Figma Type:** ${nodeType}`];
 
   if (root.layout?.width && root.layout?.height)
@@ -89,7 +100,7 @@ export function renderDesignIntent(
   if (colorPalette.length > 0) {
     lines.push('## Colors', '');
     colorPalette.slice(0, 12).forEach((hex) => {
-      const token = tokenColorEntries ? findNearestToken(hex, tokenColorEntries) : null;
+      const token = resolveColorToken(hex, colorStyles, tokenColorEntries);
       lines.push(token ? `- \`${hex}\` → \`${token}\`` : `- \`${hex}\``);
     });
     lines.push('');
@@ -201,10 +212,10 @@ export function renderCodegenGuide(opts: CodegenGuideOptions): string {
     '',
   ];
 
-  if (normalized.colorPalette.length > 0 && tokenColorEntries) {
+  if (normalized.colorPalette.length > 0 && (Object.keys(normalized.colorStyles).length > 0 || tokenColorEntries)) {
     lines.push('## Color Mapping', '', '> Match → use token. No match → raw hex. Never invent a class.', '');
     for (const hex of normalized.colorPalette.slice(0, 8)) {
-      const t = findNearestToken(hex, tokenColorEntries);
+      const t = resolveColorToken(hex, normalized.colorStyles, tokenColorEntries);
       lines.push(t ? `- \`${hex}\` → \`${t}\`` : `- \`${hex}\` → *(no match — use hex directly)*`);
     }
     lines.push('', '---', '');

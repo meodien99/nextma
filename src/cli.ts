@@ -39,6 +39,7 @@ program
   .description('Scan a Next.js project and build the knowledge graph')
   .option('--root <path>', 'Project root directory', '.')
   .option('--out <path>', 'Output directory', '.context')
+  .option('--instruction <file>', 'Append nextma MCP instructions to a file (e.g. CLAUDE.md, .cursorrules)')
   .action(async (opts) => {
     const root = path.resolve(opts.root);
     const out = path.resolve(opts.out);
@@ -59,7 +60,7 @@ program
     let lastPhase = '';
 
     try {
-      const meta = await scan(root, out, { incremental: false }, (phase, current, total, label) => {
+      const meta = await scan(root, out, { incremental: false, instructionFile: opts.instruction }, (phase, current, total, label) => {
         const name = phases[phase] ?? phase;
         if (phase !== lastPhase) { lastPhase = phase; process.stdout.write(`  ${name}…`); }
         if (phase === 'done') process.stdout.write(' ✓\n');
@@ -84,6 +85,7 @@ program
   .description('Incrementally re-scan changed files')
   .option('--root <path>', 'Project root directory', '.')
   .option('--out <path>', 'Output directory', '.context')
+  .option('--instruction <file>', 'Append nextma MCP instructions to a file (e.g. CLAUDE.md, .cursorrules)')
   .action(async (opts) => {
     const root = path.resolve(opts.root);
     const out = path.resolve(opts.out);
@@ -97,7 +99,7 @@ program
     console.log(`\nRefreshing: ${root}\n`);
 
     try {
-      const meta = await scan(root, out, { incremental: true }, (phase, _c, _t, label) => {
+      const meta = await scan(root, out, { incremental: true, instructionFile: opts.instruction }, (phase, _c, _t, label) => {
         if (label) process.stdout.write(`\r  ${phase}… ${label}   `);
         else process.stdout.write(`  ${phase}…\n`);
       });

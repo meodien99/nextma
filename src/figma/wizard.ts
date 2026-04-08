@@ -26,17 +26,6 @@ async function ask(question: string, defaultValue = ''): Promise<string> {
   return answer.trim() || defaultValue;
 }
 
-async function choose(question: string, options: string[], defaultIndex = 0): Promise<number> {
-  process.stdout.write(`? ${question}\n`);
-  options.forEach((opt, i) => process.stdout.write(`  ${i + 1}) ${opt}\n`));
-  process.stdout.write(`  Enter choice [${defaultIndex + 1}]: `);
-  const answer = (await getReadline().question('')).trim();
-  const n = parseInt(answer, 10);
-  if (!answer) return defaultIndex;
-  if (isNaN(n) || n < 1 || n > options.length) return defaultIndex;
-  return n - 1;
-}
-
 // ---------------------------------------------------------------------------
 // Wizard result type
 // ---------------------------------------------------------------------------
@@ -48,8 +37,6 @@ export interface WizardResult {
   componentName: string;
   componentSlug: string;
   outputDir: string;
-  mode: 'static' | 'llm';
-  provider?: 'claude' | 'openai';
 }
 
 // ---------------------------------------------------------------------------
@@ -93,23 +80,6 @@ export async function runFigmaWizard(urlArg?: string): Promise<WizardResult> {
   // Step 4: Output directory
   const outputDir = await ask('Output directory', '.context');
 
-  // Step 5: Mode
-  const modeIdx = await choose('Mode', [
-    'Static  (fast, no LLM)',
-    'Static + LLM enrichment',
-  ]);
-  const mode: 'static' | 'llm' = modeIdx === 1 ? 'llm' : 'static';
-
-  // Step 8: Provider (only if LLM mode)
-  let provider: 'claude' | 'openai' | undefined;
-  if (mode === 'llm') {
-    const providerIdx = await choose('Provider', [
-      'Claude (recommended)',
-      'OpenAI',
-    ]);
-    provider = providerIdx === 1 ? 'openai' : 'claude';
-  }
-
   console.log('');
   closeWizard();
 
@@ -120,7 +90,5 @@ export async function runFigmaWizard(urlArg?: string): Promise<WizardResult> {
     componentName,
     componentSlug,
     outputDir,
-    mode,
-    provider,
   };
 }

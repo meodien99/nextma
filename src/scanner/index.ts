@@ -1,4 +1,5 @@
 import * as path from 'path';
+import * as fs from 'fs';
 import type { ScanMeta } from '../types/index.js';
 import { openDb, upsertNode, upsertEdge, upsertFileHash, getFileHash, deleteNodesByPath, deleteFileRecord, getAllFilePaths, saveScanMeta } from '../db/index.js';
 import { discoverFiles, detectRouterKind, detectTypeScript } from './discover.js';
@@ -29,6 +30,7 @@ export type ProgressCallback = (phase: ScanPhase, current: number, total: number
 
 export interface ScanOptions {
   incremental?: boolean;
+  instructionFile?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -166,8 +168,51 @@ export async function scan(
   };
   saveScanMeta(db, meta);
 
+  // ── 8. Write instruction file (opt-in) ──────────────────────────────────
+  if (options.instructionFile) writeInstructionFile(abs, outputDir, options.instructionFile);
+
   progress('done', 1, 1);
   db.close();
 
   return meta;
+}
+
+// ---------------------------------------------------------------------------
+// Write CLAUDE.md nextma instructions into the scanned project
+// ---------------------------------------------------------------------------
+
+function writeInstructionFile(projectRoot: string, outputDir: string, fileName: string): void {
+  const claudePath = path.join(projectRoot, fileName);
+  const contextDir = path.relative(projectRoot, path.resolve(outputDir)) || '.context';
+
+  const block = `
+## nextma MCP
+A nextma knowledge graph is available for this project (\`${contextDir}/graph.db\`).
+The following MCP tools are connected: recon, find_reusable, search_nodes, get_node, get_relations, get_route_tree, get_component_tree, get_boundary_map, detect_changes.
+
+Prefer these tools over file search when:
+- Finding existing components, hooks, or utilities → \`recon("description")\` or \`find_reusable("description")\`
+- Understanding component relationships or render trees → \`get_node(id)\`, \`get_component_tree(id)\`
+- Checking server/client boundaries before adding hooks → \`get_boundary_map(routeId)\`
+- Exploring the route structure → \`get_route_tree()\`
+- Verifying the graph is up to date → \`detect_changes()\`
+
+Fall back to reading source files when the graph result needs more detail.
+`;
+
+  if (fs.existsSync(claudePath)) {
+    const existing = fs.readFileSync(claudePath, 'utf8');
+    if (existing.includes('## nextma MCP')) {
+      // Already present — replace the block
+      const updated = existing.replace(
+        /\n## nextma MCP[\s\S]*?(?=\n## |\n*$)/,
+        block,
+      );
+      fs.writeFileSync(claudePath, updated);
+    } else {
+      fs.appendFileSync(claudePath, block);
+    }
+  } else {
+    fs.writeFileSync(claudePath, `# Project Instructions${block}`);
+  }
 }

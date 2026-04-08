@@ -20,6 +20,12 @@
     "email": "seb.madcat@gmail.com",
     "name": "mad cat"
   },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "dist/"
+  ],
   "main": "dist/cli.js",
   "bin": {
     "nextma": "dist/cli.js"

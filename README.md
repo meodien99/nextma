@@ -149,6 +149,7 @@ nextma scan [--root <path>] [--out <path>]
 |---|---|---|
 | `--root` | `.` | Next.js project root |
 | `--out` | `.context` | Output directory for `graph.db` |
+| `--instruction <file>` | — | Append nextma MCP instructions to a file (e.g. `CLAUDE.md`, `.cursorrules`) |
 
 ---
 
