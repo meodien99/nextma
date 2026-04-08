@@ -34,7 +34,7 @@ Most AI tools scan your files on every prompt and still miss the bigger picture 
 ## Install
 
 ```bash
-npm install -g nextma
+npm install -g @meodien99/nextma
 ```
 
 Or build from source:
