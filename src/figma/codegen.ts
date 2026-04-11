@@ -277,7 +277,7 @@ export function renderCodegenGuide(opts: CodegenGuideOptions): string {
 }
 
 // ---------------------------------------------------------------------------
-// prepare.md
+// prepare.md — new component
 // ---------------------------------------------------------------------------
 
 export function renderPrepareGuide(
@@ -317,5 +317,65 @@ export function renderPrepareGuide(
     '',
     '## Step 6 — Generate',
     'After confirmation, follow the Output Format in codegen-guide.md.',
+  ].join('\n') + '\n';
+}
+
+// ---------------------------------------------------------------------------
+// update-guide.md — updating an existing component
+// ---------------------------------------------------------------------------
+
+export function renderUpdateGuide(
+  componentName: string,
+  componentSlug: string,
+  figmaDir: string,
+  contextDir: string,
+  existingFilePath?: string,
+): string {
+  const relDir = path.relative(contextDir, figmaDir) || figmaDir;
+  const rootGuide = path.join(contextDir, 'figma', 'codegen-guide.md');
+  const sourceHint = existingFilePath
+    ? `Read the existing source file: \`${existingFilePath}\``
+    : `Run \`search_nodes({ label: "Component", namePattern: "${componentName}" })\` to find the existing file, then read it.`;
+
+  return [
+    `# Update: ${componentName}`,
+    '',
+    'This is an **update** to an existing component. Read the existing source before making any changes.',
+    '',
+    'Work through each step, then **stop and wait for confirmation** before writing any code.',
+    '',
+    '## Step 1 — Read project conventions',
+    `Read \`${rootGuide}\``,
+    '',
+    '## Step 2 — Read the existing component',
+    sourceHint,
+    'Note the current props, structure, and styling approach.',
+    '',
+    '## Step 3 — Study the updated design',
+    `1. \`${path.join(relDir, 'preview.png')}\` — new design`,
+    `2. \`${path.join(relDir, 'figma-node.json')}\` — exact measurements`,
+    `3. \`${path.join(relDir, 'design-intent.md')}\` — processed summary`,
+    '',
+    '## Step 4 — Identify the diff',
+    'List what changed between the current implementation and the new design:',
+    '- Layout / spacing changes',
+    '- Color / style changes',
+    '- New or removed elements',
+    '- Props that need to change',
+    '',
+    '## Step 5 — Query the graph for dependencies',
+    '```',
+    `get_relations("${componentSlug}", { direction: "to", kind: "RENDERS" })`,
+    `figma_matches("${componentSlug}")`,
+    '```',
+    'Check what renders this component — breaking prop changes affect callers.',
+    '',
+    '## Step 6 — Present the diff and wait',
+    'Show: what you will change, what stays the same, any breaking prop changes.',
+    '**Do not write code until the user confirms.**',
+    '',
+    '## Step 7 — Apply changes',
+    'Edit the existing file. Follow the Output Format in codegen-guide.md.',
+    'If props changed, update call sites identified in Step 5.',
   ].join('\n') + '\n';
 }

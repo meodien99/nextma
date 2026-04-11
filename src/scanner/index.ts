@@ -190,6 +190,11 @@ function writeInstructionFile(projectRoot: string, outputDir: string, fileName: 
 A nextma knowledge graph is available for this project (\`${contextDir}/graph.db\`).
 The following MCP tools are connected: recon, find_reusable, search_nodes, get_node, get_relations, get_route_tree, get_component_tree, get_boundary_map, detect_changes.
 
+Before creating any new component, hook, or utility:
+- Run \`recon("description")\` or \`find_reusable("description")\` first
+- Read the source file of any top-ranked candidate before deciding to create a new one
+- Only create something new if nothing suitable exists in the graph
+
 Prefer these tools over file search when:
 - Finding existing components, hooks, or utilities → \`recon("description")\` or \`find_reusable("description")\`
 - Understanding component relationships or render trees → \`get_node(id)\`, \`get_component_tree(id)\`

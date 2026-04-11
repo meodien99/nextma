@@ -37,6 +37,8 @@ export interface WizardResult {
   componentName: string;
   componentSlug: string;
   outputDir: string;
+  isUpdate: boolean;
+  existingFilePath?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -80,6 +82,16 @@ export async function runFigmaWizard(urlArg?: string): Promise<WizardResult> {
   // Step 4: Output directory
   const outputDir = await ask('Output directory', '.context');
 
+  // Step 5: Update an existing component?
+  const updateAnswer = await ask('Updating an existing component? (y/n)', 'n');
+  const isUpdate = updateAnswer.toLowerCase().startsWith('y');
+  let existingFilePath: string | undefined;
+
+  if (isUpdate) {
+    const p = await ask('Path to the existing component file (e.g. src/components/ui/Button.tsx)');
+    if (p) existingFilePath = p;
+  }
+
   console.log('');
   closeWizard();
 
@@ -90,5 +102,7 @@ export async function runFigmaWizard(urlArg?: string): Promise<WizardResult> {
     componentName,
     componentSlug,
     outputDir,
+    isUpdate,
+    existingFilePath,
   };
 }

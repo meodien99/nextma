@@ -201,28 +201,43 @@ nextma visualize [--out <path>] [--port <number>]
 If your team works with Figma, `figma-parse` extends the graph with design intent and generates structured codegen guides for your AI tool.
 
 ```bash
+# New component
 nextma figma-parse https://www.figma.com/design/...
+
+# Update an existing component (refreshes design files, preserves your codegen-guide.md edits)
+nextma figma-parse https://www.figma.com/design/... --update
+
+# Update with a known source path (written into update-guide.md for Claude)
+nextma figma-parse https://www.figma.com/design/... --update --existing src/components/ui/button.tsx
 ```
 
 Requires `FIGMA_ACCESS_TOKEN` in your environment or `.env` file.
 
 Outputs to `.context/figma/<component-slug>/`:
 
-| File | Description |
-|---|---|
-| `meta.json` | Figma URL, file key, node ID |
-| `figma-node.json` | Normalized design tree with exact measurements |
-| `preview.png` | Component preview image |
-| `design-intent.md` | Spacing, typography, color summary |
-| `codegen-guide.md` | AI codegen instructions referencing your actual codebase |
-| `prepare.md` | Step-by-step prompt to generate the component in Claude Code |
+| File | New | Update |
+|---|---|---|
+| `meta.json` | created | overwritten |
+| `figma-node.json` | created | overwritten |
+| `preview.png` | created | overwritten |
+| `design-intent.md` | created | overwritten |
+| `codegen-guide.md` | created | **preserved** |
+| `prepare.md` | created | — |
+| `update-guide.md` | — | created |
 
 The parsed component is linked into `graph.db` via `FIGMA_MAPS_TO` edges — so `figma_matches("button")` returns existing code components that correspond to the design.
 
-To generate a component, open Claude Code and run:
+**New component** — open Claude Code and run:
 ```
 Read .context/figma/<component-slug>/prepare.md and follow the steps
 ```
+
+**Update existing component** — open Claude Code and run:
+```
+Read .context/figma/<component-slug>/update-guide.md and follow the steps
+```
+
+The update guide tells Claude to read your existing source file first, identify what changed in the design, check for callers before changing props, then present a diff for confirmation before touching any code.
 
 Get a Figma personal access token at **Figma → Account settings → Personal access tokens**. Never commit `.env` to source control.
 

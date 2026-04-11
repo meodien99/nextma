@@ -11,11 +11,12 @@ import { scan, ScanPhase } from './scanner/index.js';
 import { runFigmaWizard, closeWizard } from './figma/wizard.js';
 import { parseFigmaUrl, loadFigmaToken, fetchFigmaNode, fetchFigmaImageBase64 } from './figma/api.js';
 import { normalizeFigmaNode } from './figma/normalize.js';
-import { parseCssVars, flattenTokenColors, resolveTokenColors } from './figma/colors.js';
+import { flattenTokenColors } from './figma/colors.js';
 import {
   renderDesignIntent,
   renderCodegenGuide,
   renderPrepareGuide,
+  renderUpdateGuide,
   renderRootCodegenGuide,
 } from './figma/codegen.js';
 import { openDb, getScanMeta } from './db/index.js';
@@ -120,11 +121,19 @@ program
   .action(async (urlArg?: string) => {
     try {
       const wizard = await runFigmaWizard(urlArg);
-      const { componentName, componentSlug, figmaUrl, outputDir } = wizard;
+      const { componentName, componentSlug, figmaUrl, outputDir, isUpdate, existingFilePath } = wizard;
 
       const outBase = path.resolve(outputDir);
       const figmaRootDir = path.join(outBase, 'figma');
       const figmaDir = path.join(figmaRootDir, componentSlug);
+      const alreadyExists = fs.existsSync(figmaDir);
+
+      if (!isUpdate && alreadyExists) {
+        console.log(`\n  Note: ${figmaDir} already exists.`);
+        console.log(`  To update an existing component, use: nextma figma-parse --update`);
+        console.log(`  Proceeding will overwrite all files including codegen-guide.md.\n`);
+      }
+
       fs.mkdirSync(figmaDir, { recursive: true });
 
       // Load design tokens from graph.db if available
@@ -140,14 +149,21 @@ program
         routerKind = meta?.routerKind;
         hasTypeScript = meta?.hasTypeScript;
 
-        // Load CSS vars and resolve to token color entries for color mapping
-        const cssVarsPath = path.join(path.resolve(wizard.outputDir, '..'), 'app', 'globals.css');
-        if (fs.existsSync(cssVarsPath)) {
-          const cssVars = parseCssVars(cssVarsPath);
-          const { extractDesignTokens } = await import('./scanner/nextjs.js');
-          const rawTokens = extractDesignTokens(path.resolve(wizard.outputDir, '..'));
-          const colors = rawTokens['colors'] ?? {};
-          tokenColorEntries = flattenTokenColors(resolveTokenColors(colors, cssVars));
+        // Read resolved color tokens from graph.db (resolved during scan phase)
+        const colorRows = db.prepare(
+          `SELECT name, json(properties) as props FROM nodes WHERE label = 'DesignToken'`
+        ).all() as Array<{ name: string; props: string }>;
+
+        const colorHexMap: Record<string, string> = {};
+        for (const row of colorRows) {
+          const p = JSON.parse(row.props) as { tokenCategory?: string; resolvedHex?: string };
+          if (p.tokenCategory === 'colors' && p.resolvedHex) {
+            // name is "colors.neutral-300" → strip prefix to get "neutral-300"
+            colorHexMap[row.name.replace(/^colors\./, '')] = p.resolvedHex;
+          }
+        }
+        if (Object.keys(colorHexMap).length > 0) {
+          tokenColorEntries = flattenTokenColors(colorHexMap);
         }
       }
 
@@ -185,17 +201,29 @@ program
         imageRef + renderDesignIntent(normalized, tokenColorEntries),
       );
 
-      // Write codegen-guide.md
-      fs.writeFileSync(
-        path.join(figmaDir, 'codegen-guide.md'),
-        renderCodegenGuide({ componentName, componentSlug, figmaUrl, normalized, tokenColorEntries, routerKind, hasTypeScript }),
-      );
+      // Write codegen-guide.md — skip on update (user may have edited it)
+      const codegenGuidePath = path.join(figmaDir, 'codegen-guide.md');
+      if (!isUpdate || !fs.existsSync(codegenGuidePath)) {
+        fs.writeFileSync(
+          codegenGuidePath,
+          renderCodegenGuide({ componentName, componentSlug, figmaUrl, normalized, tokenColorEntries, routerKind, hasTypeScript }),
+        );
+      } else {
+        process.stdout.write('  codegen-guide.md preserved (use --update)\n');
+      }
 
-      // Write prepare.md
-      fs.writeFileSync(
-        path.join(figmaDir, 'prepare.md'),
-        renderPrepareGuide(componentName, componentSlug, figmaDir, outBase),
-      );
+      // Write prepare.md (new) or update-guide.md (update)
+      if (isUpdate) {
+        fs.writeFileSync(
+          path.join(figmaDir, 'update-guide.md'),
+          renderUpdateGuide(componentName, componentSlug, figmaDir, outBase, existingFilePath),
+        );
+      } else {
+        fs.writeFileSync(
+          path.join(figmaDir, 'prepare.md'),
+          renderPrepareGuide(componentName, componentSlug, figmaDir, outBase),
+        );
+      }
 
       // Write root codegen-guide.md if not exists
       const rootGuide = path.join(figmaRootDir, 'codegen-guide.md');
@@ -218,11 +246,12 @@ program
         db.close();
       }
 
+      const guideFile = isUpdate ? 'update-guide.md' : 'prepare.md';
       console.log(`\n  Written to: ${figmaDir}`);
       console.log(`    meta.json, figma-node.json, preview.png`);
-      console.log(`    design-intent.md, codegen-guide.md, prepare.md`);
+      console.log(`    design-intent.md${isUpdate ? ' (refreshed)' : ', codegen-guide.md'}, ${guideFile}`);
       console.log(`\nNext: open Claude Code and run:`);
-      console.log(`  "Read ${path.join(figmaDir, 'prepare.md')} and follow the steps"`);
+      console.log(`  "Read ${path.join(figmaDir, guideFile)} and follow the steps"`);
     } catch (err) {
       closeWizard();
       console.error('\nfigma-parse failed:', err instanceof Error ? err.message : err);

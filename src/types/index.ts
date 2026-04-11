@@ -44,7 +44,12 @@ export interface NodeProperties {
   routerKind?: 'app' | 'pages';
   // DesignToken
   tokenCategory?: string; // 'colors' | 'spacing' | 'fontSize' | etc.
-  tokenValue?: string;
+  tokenValue?: string;    // raw tailwind value e.g. 'hsl(var(--neutral-300))'
+  resolvedHex?: string;   // resolved hex color e.g. '#2D3142' (colors only)
+  // DesignToken — typography (fontSize category)
+  fontSize?: number;      // px
+  lineHeight?: number;    // px
+  fontWeight?: number;    // 400 | 500 | 700
   // FigmaNode
   figmaUrl?: string;
   fileKey?: string;
